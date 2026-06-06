@@ -1,0 +1,34 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="34%" r="82%">
+      <stop offset="0%" stop-color="#16335a"/>
+      <stop offset="100%" stop-color="#04070f"/>
+    </radialGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="7" flood-color="#02030a" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- a speech bubble in the shape of a heart -->
+  <g filter="url(#lift)" fill="#ffffff">
+    <!-- tail (lower-left flick), drawn first so the heart sits on top -->
+    <path d="M92,152 L68,208 L120,170 Z"/>
+    <!-- heart body -->
+    <path d="M128,96
+             C117,73 95,64 79,64
+             C50,64 42,91 42,110
+             C42,139 89,161 128,186
+             C167,161 214,139 214,110
+             C214,91 206,64 177,64
+             C161,64 139,73 128,96 Z"/>
+  </g>
+
+  <!-- "…" chat dots, cut into the bubble -->
+  <g fill="#16335a">
+    <circle cx="102" cy="118" r="9"/>
+    <circle cx="128" cy="118" r="9"/>
+    <circle cx="154" cy="118" r="9"/>
+  </g>
+</svg>
