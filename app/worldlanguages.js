@@ -8,6 +8,8 @@
 const LANGUAGES = window.LANGUAGES || {};
 const SLICES    = window.TIME_SLICES || [];
 const DATA      = window.LANGUAGE_DATA || {};
+const PHYLA     = window.PHYLA || {};                       // top-level families (Family view)
+const FAMILY_TO_PHYLUM = window.FAMILY_TO_PHYLUM || {};
 const SLICE_INDEX = {}; SLICES.forEach((s, i) => (SLICE_INDEX[s.id] = i));
 
 const yr = id => parseInt(id, 10);
@@ -40,9 +42,22 @@ const state = {
   focus: null,    // when set to a language key, the globe shows that language's SHARE per country
   view: 'shade',  // fill: 'shade' (default) | 'bands' (proportional strips, glitchy on globe) | 'dots' | 'solid'
   flat: false,    // flat 2D map view (vs the globe)
+  byFamily: false,// Family view: roll every language up to its top-level phylum (Indo-European, …)
 };
 let playTimer = null;
 let spinOn = true;
+
+/* ---------- Family view: roll languages up to their top-level phylum ---------- */
+const phylumOf = k => FAMILY_TO_PHYLUM[(LANGUAGES[k] || {}).family] || 'Other';
+function aggregateToPhylum(comp) {                 // {langKey: pct} -> {phylumKey: pct}
+  const out = {};
+  for (const k in comp) { const p = phylumOf(k); out[p] = (out[p] || 0) + comp[k]; }
+  return out;
+}
+// Wrap a raw composition: aggregate to phylum when Family view is on, else pass through.
+const aggIf = comp => (state.byFamily && comp) ? aggregateToPhylum(comp) : comp;
+// Stable stacking/iteration order for the active view (languages, or phyla in Family view).
+const orderKeys = () => state.byFamily ? Object.keys(PHYLA) : orderKeys();
 
 /* ----------------------------- data helpers ----------------------------- */
 function isoOf(props) {
@@ -52,7 +67,8 @@ function isoOf(props) {
 }
 // Composition at a target slice: carry forward the last known slice;
 // null before a territory's earliest data (uninhabited / unknown).
-function compositionAt(rec, sliceId) {
+function compositionAt(rec, sliceId) { return aggIf(compositionAtRaw(rec, sliceId)); }
+function compositionAtRaw(rec, sliceId) {
   if (!rec || !rec.s) return null;
   const target = SLICE_INDEX[sliceId];
   const avail = Object.keys(rec.s).map(k => SLICE_INDEX[k]).filter(n => n != null).sort((a, b) => a - b);
@@ -62,7 +78,8 @@ function compositionAt(rec, sliceId) {
   return rec.s[SLICES[pick].id];
 }
 // Composition at any YEAR — linear interpolation between a country's known anchors (smooth growth/shrink).
-function compAtYear(rec, year) {
+function compAtYear(rec, year) { return aggIf(compAtYearRaw(rec, year)); }
+function compAtYearRaw(rec, year) {
   if (!rec || !rec.s) return null;
   const av = Object.keys(rec.s).map(id => ({ y: yr(id), c: rec.s[id] })).sort((a, b) => a.y - b.y);
   if (!av.length || year < av[0].y) return null;
@@ -94,8 +111,8 @@ function majorityOf(comp) {
 function sortedParts(comp) {
   return Object.entries(comp).map(([k, v]) => ({ key: k, pct: v })).sort((a, b) => b.pct - a.pct);
 }
-const langColor = k => (LANGUAGES[k] && LANGUAGES[k].color) || '#888';
-const langLabel = k => (LANGUAGES[k] && LANGUAGES[k].label) || k;
+const langColor = k => (LANGUAGES[k] && LANGUAGES[k].color) || (PHYLA[k] && PHYLA[k].color) || '#888';
+const langLabel = k => (LANGUAGES[k] && LANGUAGES[k].label) || (PHYLA[k] && PHYLA[k].label) || k;
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
@@ -222,7 +239,7 @@ function buildBandsForEra() {
     const iso = isoOf(f.properties);
     const comp = compAtYear(iso && DATA[iso], year);
     if (!comp) continue;
-    const parts = Object.keys(LANGUAGES).filter(k => (comp[k] || 0) > 0);   // fixed order = stable south→north stack
+    const parts = orderKeys().filter(k => (comp[k] || 0) > 0);   // fixed order = stable south→north stack
     const total = parts.reduce((s, k) => s + comp[k], 0) || 1;
     const geom = geomOf(f);
     if (parts.length <= 1 || !PC) {                       // homogeneous → whole country, one colour (no clipping)
@@ -370,7 +387,7 @@ function refreshDots() {
     if (!comp) { bands[d.iso] = null; continue; }
     const t = Object.values(comp).reduce((a, b) => a + b, 0) || 1;
     let acc = 0; const b = [];
-    for (const k of Object.keys(LANGUAGES)) { const v = comp[k] || 0; if (v > 0) { b.push({ key: k, c1: (acc + v) / t }); acc += v; } }
+    for (const k of orderKeys()) { const v = comp[k] || 0; if (v > 0) { b.push({ key: k, c1: (acc + v) / t }); acc += v; } }
     bands[d.iso] = b;
   }
   const shown = [];
@@ -423,7 +440,7 @@ function trendChartSVG(rec) {
   });
   const cum = SLICES.map(() => 0);
   let bands = '';
-  for (const k of Object.keys(LANGUAGES)) {                 // fixed language order → stable bands
+  for (const k of orderKeys()) {                 // fixed language order → stable bands
     let any = false; const tops = []; const bots = [];
     for (let i = 0; i < n; i++) {
       const v = cols[i] ? (cols[i][k] || 0) : 0;
@@ -593,7 +610,7 @@ function updateFlatBands() {
       g.innerHTML = '<rect x="' + m.x0 + '" y="' + m.yTop + '" width="' + W + '" height="' + H + '" fill="' + col + '"/>';
       continue;
     }
-    const parts = Object.keys(LANGUAGES).filter(k => (comp[k] || 0) > 0);
+    const parts = orderKeys().filter(k => (comp[k] || 0) > 0);
     const total = parts.reduce((s, k) => s + comp[k], 0) || 1;
     let cum = 0, rects = '';
     for (const k of parts) {                       // stack from the bottom (south) up
@@ -765,6 +782,23 @@ function setFlat(flat) {
     try { if (!localStorage.getItem('wre_seen_flat_tip') && document.getElementById('tutorial').classList.contains('hidden')) showFlatTip(); } catch (e) {}
   } else { rebuildBands(); refreshDots(); }
 }
+// Family view: roll languages up to their phylum (Indo-European, Afroasiatic, …) and back.
+function setFamily(on) {
+  state.byFamily = on;
+  if (state.focus) {                              // a language/phylum focus won't exist across views — clear it
+    state.focus = null;
+    document.body.classList.remove('focus-on');
+    document.getElementById('focusBanner').classList.add('hidden');
+  }
+  const mf = document.getElementById('miFamily');
+  if (mf) { mf.classList.toggle('on', on); const st = mf.querySelector('.mi-state'); if (st) st.textContent = on ? 'On' : 'Off'; }
+  const note = document.querySelector('#legendBox .gb-note');
+  if (note) note.innerHTML = on
+    ? 'Click a family to highlight it &middot; % of world speakers by family'
+    : 'Click a language to highlight it &middot; % of world native speakers (approx.)';
+  applySlice();
+  refreshPies();
+}
 
 const menu = document.getElementById('menu'), menuBtn = document.getElementById('menuBtn');
 const closeMenu = () => menu.classList.add('hidden');
@@ -772,6 +806,7 @@ menuBtn.addEventListener('click', e => { e.stopPropagation(); menu.classList.tog
 document.addEventListener('click', e => { if (!menu.classList.contains('hidden') && !menu.contains(e.target) && e.target !== menuBtn) closeMenu(); });
 
 document.getElementById('miView').addEventListener('click', () => { setFlat(!state.flat); closeMenu(); });
+document.getElementById('miFamily').addEventListener('click', () => { setFamily(!state.byFamily); closeMenu(); });
 document.getElementById('miFill').addEventListener('click', () => { const i = VIEW_ORDER.indexOf(state.view); setView(VIEW_ORDER[(i + 1) % VIEW_ORDER.length]); });
 setView(state.view);
 
@@ -863,6 +898,7 @@ document.addEventListener('click', e => { if (!document.getElementById('searchWr
 
 function buildShareURL() {
   const seg = [curYear(), state.focus || '', state.selected || ''];
+  if (state.byFamily) seg.push('family');
   if (state.flat) seg.push('flat');
   while (seg.length > 1 && seg[seg.length - 1] === '') seg.pop();
   return location.origin + location.pathname + '#' + seg.join(',');
@@ -884,6 +920,12 @@ document.getElementById('miShare').addEventListener('click', () => {
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, done));
   else fallbackCopy(url, done);
 });
+// "Share this view" emits chrome-extension:// links inside the packaged extension (only
+// installed users can open them) — hide it there. It stays on the standalone web build
+// (42-apps.github.io/worldlanguages/app/…), where buildShareURL() makes public https links.
+if (location.protocol === 'chrome-extension:') {
+  const sh = document.getElementById('miShare'); if (sh) sh.remove();
+}
 
 /* ------------------------------- world trend chart ------------------------------- */
 function worldTrendSVG() {
@@ -893,7 +935,7 @@ function worldTrendSVG() {
   const cols = SLICES.map(s => { const o = {}; for (const r of globalBreakdown(yr(s.id))) o[r.key] = r.pct; return o; });
   const cum = SLICES.map(() => 0);
   let bands = '';
-  for (const k of Object.keys(LANGUAGES)) {                 // fixed language order → stable stacked bands
+  for (const k of orderKeys()) {                 // fixed language order → stable stacked bands
     let any = false; const tops = [], bots = [];
     for (let i = 0; i < n; i++) {
       const v = cols[i][k] || 0; if (v > 0.05) any = true;
@@ -917,7 +959,7 @@ function worldTrendSVG() {
 function worldTrendLegend() {
   const present = new Set();
   for (const s of SLICES) for (const r of globalBreakdown(yr(s.id))) if (r.pct > 0.3) present.add(r.key);
-  return Object.keys(LANGUAGES).filter(k => present.has(k)).map(k =>
+  return orderKeys().filter(k => present.has(k)).map(k =>
     `<span class="wt-li"><span class="wt-sw" style="background:${langColor(k)}"></span>${langLabel(k)}</span>`).join('');
 }
 function showWorldTrend() {
@@ -955,7 +997,8 @@ function boot() {
   try { if (!localStorage.getItem('wre_seen_tutorial')) showTutorial(); } catch (e) {}
   fetch('data/countries.geojson').then(r => r.json()).then(geo => {
     initGlobe(geo);
-    if (foc && LANGUAGES[foc]) setFocus(foc);
+    if (/family/i.test(location.hash)) setFamily(true);
+    if (foc && (LANGUAGES[foc] || PHYLA[foc])) setFocus(foc);
     if (iso) { const f = countries.find(c => isoOf(c.properties) === iso.toUpperCase()); if (f) onClick(f); }
     if (/flat/i.test(location.hash)) setFlat(true);
     if (/trend/i.test(location.hash)) showWorldTrend();

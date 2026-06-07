@@ -117,3 +117,51 @@ window.TIME_SLICES = [
   { id: '2000',  label: '2000',    era: 'documented' },
   { id: '2025',  label: 'Today',   era: 'documented' },
 ];
+
+/* ----------------------------------------------------------------------------
+   PHYLA — top-level language families for the optional "Family view" toggle.
+   In family view every language above is rolled up to its phylum (e.g. English,
+   Spanish, Hindi-Urdu, Russian, Persian, Greek, Latin → Indo-European), so the
+   map reads as the world's great language families. FAMILY_TO_PHYLUM maps each
+   LANGUAGES[].family (a branch) to its phylum; PHYLA gives each a label + colour.
+   ========================================================================== */
+window.PHYLA = {
+  'Indo-European':  { label: 'Indo-European',  color: '#4E6FD0' }, // Romance, Germanic, Slavic, Indo-Aryan, Iranian, Hellenic, Celtic, Baltic, Armenian, Albanian
+  'Afroasiatic':    { label: 'Afroasiatic',    color: '#1E9E54' }, // Semitic (Arabic/Hebrew/Aramaic), Berber, Cushitic, Egyptian
+  'Mesopotamian':   { label: 'Mesopotamian',   color: '#935116' }, // ancient Sumerian/Akkadian/Elamite/Hurrian-Hittite sphere
+  'Dravidian':      { label: 'Dravidian',      color: '#5D4037' },
+  'Sino-Tibetan':   { label: 'Sino-Tibetan',   color: '#F1C40F' }, // Chinese, Tibeto-Burman
+  'Japonic':        { label: 'Japonic',        color: '#F39C12' },
+  'Koreanic':       { label: 'Koreanic',       color: '#E59866' },
+  'Turkic':         { label: 'Turkic',         color: '#9A7D0A' },
+  'Mongolic':       { label: 'Mongolic',       color: '#7D6608' },
+  'Austronesian':   { label: 'Austronesian',   color: '#32BD94' },
+  'Austroasiatic':  { label: 'Austroasiatic',  color: '#1A959E' },
+  'Tai-Kadai':      { label: 'Tai-Kadai',      color: '#6ACDCA' },
+  'Niger-Congo':    { label: 'Niger-Congo',    color: '#D68910' },
+  'Nilo-Saharan':   { label: 'Nilo-Saharan',   color: '#9C640C' },
+  'Khoisan':        { label: 'Khoisan',        color: '#7F8C8D' },
+  'Uralic':         { label: 'Uralic',         color: '#5D6D7E' },
+  'Caucasian':      { label: 'Caucasian',      color: '#34495E' },
+  'Amerindian':     { label: 'Amerindian',     color: '#8E44AD' }, // Mesoamerican, Andean & other Native American
+  'Australian':     { label: 'Aboriginal Australian', color: '#BA4A00' },
+  'Papuan':         { label: 'Papuan',         color: '#A04000' },
+  'Other':          { label: 'Other / various', color: '#95A5A6' },
+};
+
+window.FAMILY_TO_PHYLUM = {
+  'Italic': 'Indo-European', 'Romance': 'Indo-European', 'Germanic': 'Indo-European',
+  'Hellenic': 'Indo-European', 'Celtic': 'Indo-European', 'Slavic': 'Indo-European',
+  'Balto-Slavic': 'Indo-European', 'Indo-European': 'Indo-European',
+  'Indo-Aryan': 'Indo-European', 'Iranian': 'Indo-European',
+  'Dravidian': 'Dravidian',
+  'Semitic': 'Afroasiatic', 'Afroasiatic': 'Afroasiatic',
+  'Mesopotamian': 'Mesopotamian',
+  'Sino-Tibetan': 'Sino-Tibetan', 'Japonic': 'Japonic', 'Koreanic': 'Koreanic',
+  'Turkic': 'Turkic', 'Mongolic': 'Mongolic',
+  'Austronesian': 'Austronesian', 'Austroasiatic': 'Austroasiatic', 'Tai-Kadai': 'Tai-Kadai',
+  'Niger-Congo': 'Niger-Congo', 'Nilo-Saharan': 'Nilo-Saharan', 'Khoisan': 'Khoisan',
+  'Uralic': 'Uralic', 'Caucasian': 'Caucasian',
+  'Amerindian': 'Amerindian', 'Australian': 'Australian', 'Papuan': 'Papuan',
+  '—': 'Other',
+};
