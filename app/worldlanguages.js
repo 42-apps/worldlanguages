@@ -43,7 +43,6 @@ const state = {
   view: 'shade',  // fill: 'shade' (default) | 'bands' (proportional strips, glitchy on globe) | 'dots' | 'solid'
   flat: false,    // flat 2D map view (vs the globe)
   byFamily: false,// Family view: roll every language up to its top-level phylum (Indo-European, …)
-  lens: null,     // map lens: null (languages) | 'diversity' | 'change' | 'classical' | 'confidence'
 };
 let playTimer = null;
 let spinOn = true;
@@ -58,7 +57,7 @@ function aggregateToPhylum(comp) {                 // {langKey: pct} -> {phylumK
 // Wrap a raw composition: aggregate to phylum when Family view is on, else pass through.
 const aggIf = comp => (state.byFamily && comp) ? aggregateToPhylum(comp) : comp;
 // Stable stacking/iteration order for the active view (languages, or phyla in Family view).
-const orderKeys = () => state.byFamily ? Object.keys(PHYLA) : orderKeys();
+const orderKeys = () => state.byFamily ? Object.keys(PHYLA) : Object.keys(LANGUAGES);
 
 /* ----------------------------- data helpers ----------------------------- */
 function isoOf(props) {
@@ -129,73 +128,6 @@ function blendColor(comp, a) {
   return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 }
 
-/* ------------------------------ map lenses ------------------------------ */
-/* Choropleths computed straight from the existing data: colour each country by a
-   single metric instead of its language mix. Orthogonal to Family view (always
-   language-level). state.lens ∈ null | diversity | change | classical | confidence. */
-const CLASSICAL = ['latin', 'aramaic', 'mesopotamian', 'sanskrit', 'egyptian']; // classical / extinct tongues
-const LENS_META = {
-  diversity:  { label: 'Diversity',  lo: 'One language', hi: 'Many languages', stops: ['#2b3a5e', '#1f9e89', '#f4e04d'], note: 'Linguistic diversity this era — 1 − Σ(share²).' },
-  change:     { label: 'Change',     lo: 'Stable',       hi: 'Upheaval',       stops: ['#2c3e66', '#e67e22', '#c0392b'], note: 'How much the language mix shifted since the previous era.' },
-  classical:  { label: 'Classical',  lo: 'None',         hi: 'Classical core', stops: ['#222a3f', '#9a7d0a', '#f1c40f'], note: 'Share of classical / extinct tongues — Latin, Aramaic, Sumerian-Akkadian, Sanskrit, Egyptian.' },
-  confidence: { label: 'Confidence', lo: 'Estimated',    hi: 'Well attested',  stops: ['#a8631c', '#c9a24a', '#2f9e8a'], note: 'How firmly attested this era is — deep antiquity is estimated.' },
-};
-function lerpHex(a, b, t) {
-  const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
-  return [16, 8, 0].map(sh => Math.round(((na >> sh) & 255) + (((nb >> sh) & 255) - ((na >> sh) & 255)) * t));
-}
-function rampRGB(lens, t) {                          // t∈[0,1] → [r,g,b] across the lens's stops
-  const stops = (LENS_META[lens] || {}).stops || ['#444444', '#cccccc'];
-  t = Math.max(0, Math.min(1, t));
-  const seg = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(seg));
-  return lerpHex(stops[i], stops[i + 1], seg - i);
-}
-const ANCHOR_YEARS = SLICES.map(s => yr(s.id)).sort((a, b) => a - b);
-function prevAnchorYear(year) { let p = ANCHOR_YEARS[0]; for (const y of ANCHOR_YEARS) { if (y < year) p = y; else break; } return p; }
-function compDistance(c0, c1) {                      // total reallocation 0..100 between two comps
-  const n0 = Object.values(c0).reduce((a, b) => a + b, 0) || 1, n1 = Object.values(c1).reduce((a, b) => a + b, 0) || 1;
-  let d = 0; for (const k of new Set([...Object.keys(c0), ...Object.keys(c1)])) d += Math.abs((c0[k] || 0) / n0 - (c1[k] || 0) / n1);
-  return d / 2 * 100;
-}
-function confidenceScore(rec, year) {                // era tier, penalised by distance to this country's nearest data anchor
-  const base = year <= 1 ? 0.36 : year < 1500 ? 0.6 : year < 1900 ? 0.78 : 0.93;
-  if (!rec || !rec.s) return base;
-  let gap = Infinity; for (const id in rec.s) gap = Math.min(gap, Math.abs(yr(id) - year));
-  return Math.max(0.08, Math.min(0.98, base - Math.min(0.28, gap / 4000)));
-}
-// Metric in [0,1] (+ a readable label) for the active lens, or null where there's no data.
-function lensMetric(iso, year) {
-  const rec = DATA[iso], comp = compAtYearRaw(rec, year);   // language-level, independent of Family view
-  if (!comp) return null;
-  const tot = Object.values(comp).reduce((a, b) => a + b, 0) || 1;
-  if (state.lens === 'diversity') { let s = 0; for (const k in comp) { const p = comp[k] / tot; s += p * p; } const d = 1 - s; return { t: Math.min(1, d / 0.82), label: d.toFixed(2) }; }
-  if (state.lens === 'classical') { let s = 0; for (const k of CLASSICAL) s += (comp[k] || 0); const f = s / tot; return { t: Math.min(1, f), label: Math.round(f * 100) + '%' }; }
-  if (state.lens === 'change')    { const c0 = compAtYearRaw(rec, prevAnchorYear(year)); const ch = c0 ? compDistance(c0, comp) : 0; return { t: Math.min(1, ch / 55), label: c0 ? Math.round(ch) + '%' : 'new' }; }
-  if (state.lens === 'confidence'){ const c = confidenceScore(rec, year); return { t: c, label: c >= 0.8 ? 'well attested' : c >= 0.6 ? 'good' : c >= 0.4 ? 'fair' : 'estimated' }; }
-  return null;
-}
-function lensColor(iso, year, sel, hov) {
-  const m = lensMetric(iso, year);
-  if (!m) return null;
-  const [r, g, b] = rampRGB(state.lens, m.t);
-  return `rgba(${r}, ${g}, ${b}, ${sel ? 0.98 : hov ? 0.9 : 0.82})`;
-}
-function lensLegendHTML() {
-  const meta = LENS_META[state.lens]; if (!meta) return '';
-  return `<div class="ll-grad" style="background:linear-gradient(90deg, ${meta.stops.join(', ')})"></div>` +
-    `<div class="ll-ends"><span>${meta.lo}</span><span>${meta.hi}</span></div><div class="ll-note">${meta.note}</div>`;
-}
-function syncLensChips() {
-  document.querySelectorAll('#lensChips .lens-chip').forEach(c => c.classList.toggle('on', (c.dataset.lens || '') === (state.lens || '')));
-}
-function setLens(lens) {
-  state.lens = lens || null;
-  if (state.lens && state.focus) { state.focus = null; document.body.classList.remove('focus-on'); document.getElementById('focusBanner').classList.add('hidden'); }
-  syncLensChips();
-  applySlice();
-  refreshPies();
-}
-
 /* -------------------------------- globe -------------------------------- */
 let globe, countries = [];
 const elViz = document.getElementById('globeViz');
@@ -217,7 +149,6 @@ function capColor(feat) {
     return hexA(langColor(state.focus), a);
   }
   if (!comp) return (sel || hov) ? 'rgba(120,130,160,0.4)' : NEUTRAL;
-  if (state.lens) return lensColor(iso, curYear(), sel, hov) || NEUTRAL;
   if (state.view === 'shade') return blendColor(comp, sel ? 0.97 : hov ? 0.92 : 0.85);
   if (state.view === 'dots') return (sel || hov) ? 'rgba(120,132,160,0.34)' : 'rgba(58,70,98,0.22)';  // dim base so dots pop
   const maj = majorityOf(comp);
@@ -331,7 +262,7 @@ function buildBandsForEra() {
 }
 function rebuildBands() {
   if (!globe) return;
-  const useBands = state.view === 'bands' && !state.focus && !state.lens;
+  const useBands = state.view === 'bands' && !state.focus;
   bandFeats = useBands ? buildBandsForEra() : [];
   globe.polygonsTransitionDuration(useBands ? 0 : 300).polygonsData(useBands ? bandFeats : countries);
   refreshGlobe();
@@ -384,7 +315,7 @@ function makePie(d) {
 // otherwise override a per-element hide (that's what left empty circles in shade mode).
 function refreshPies() {
   if (!globe) return;
-  if (!state.pies || state.focus || state.lens) { globe.htmlElementsData([]); return; }
+  if (!state.pies || state.focus) { globe.htmlElementsData([]); return; }
   const shown = [];
   for (const d of pieData) {
     if (d.size < PIE_MIN) continue;            // tiny countries → hover popup instead
@@ -447,7 +378,7 @@ function buildDotData() {
 }
 function refreshDots() {
   if (!globe) return;
-  if (state.view !== 'dots' || state.focus || state.lens) { globe.pointsData([]); return; }
+  if (state.view !== 'dots' || state.focus) { globe.pointsData([]); return; }
   const year = curYear();
   const bands = {};
   for (const d of dotData) {
@@ -582,9 +513,7 @@ function showDetail(iso, feat) {
   document.getElementById('detailName').textContent = nameOf(iso, feat);
   document.getElementById('detailEra').textContent = STEPS[state.stepIdx].label;
   const comp = compAtYear(rec, curYear());
-  let bk = comp ? breakdownHTML(comp) : `<div class="tt-nd">No data for this era.</div>`;
-  if (state.lens && comp) { const m = lensMetric(iso, curYear()); if (m) bk = `<div class="detail-lens"><span class="dl-k">${LENS_META[state.lens].label}</span><span class="dl-v">${m.label}</span></div>` + bk; }
-  document.getElementById('detailBreakdown').innerHTML = bk;
+  document.getElementById('detailBreakdown').innerHTML = comp ? breakdownHTML(comp) : `<div class="tt-nd">No data for this era.</div>`;
   document.getElementById('detailTrend').innerHTML = rec ? trendChartSVG(rec) : '';
   const noteEl = document.getElementById('detailNote');
   noteEl.textContent = (rec && rec.note) ? rec.note : '';
@@ -622,14 +551,6 @@ function globalBreakdown(year) {
 function updateGlobalBox() {
   const yEl = document.getElementById('gbYear'); if (!yEl) return;
   yEl.textContent = STEPS[state.stepIdx].label;
-  const gbBar = document.getElementById('gbBar'), gbRows = document.getElementById('gbRows'), lensLeg = document.getElementById('lensLegend');
-  if (state.lens) {                                  // lens active → gradient legend instead of the language list
-    gbBar.classList.add('hidden'); gbRows.classList.add('hidden');
-    if (lensLeg) { lensLeg.classList.remove('hidden'); lensLeg.innerHTML = lensLegendHTML(); }
-    return;
-  }
-  if (lensLeg) lensLeg.classList.add('hidden');
-  gbBar.classList.remove('hidden'); gbRows.classList.remove('hidden');
   const bd = globalBreakdown(curYear()).filter(r => r.pct >= 0.1);
   document.getElementById('gbBar').innerHTML = bd.map(r => `<span style="width:${r.pct.toFixed(2)}%;background:${langColor(r.key)}"></span>`).join('');
   document.getElementById('gbRows').innerHTML = bd.map(r =>
@@ -684,11 +605,6 @@ function updateFlatBands() {
     if (!g) continue;
     const comp = compAtYear(DATA[iso], year), m = flatMeta[iso], W = m.x1 - m.x0, H = m.yBot - m.yTop;
     if (!comp) { g.innerHTML = ''; continue; }
-    if (state.lens) {
-      const col = lensColor(iso, year, iso === state.selected, false);
-      g.innerHTML = col ? '<rect x="' + m.x0 + '" y="' + m.yTop + '" width="' + W + '" height="' + H + '" fill="' + col + '"/>' : '';
-      continue;
-    }
     if (state.focus) {
       const col = hexA(langColor(state.focus), 0.08 + 0.9 * ((comp[state.focus] || 0) / 100));
       g.innerHTML = '<rect x="' + m.x0 + '" y="' + m.yTop + '" width="' + W + '" height="' + H + '" fill="' + col + '"/>';
@@ -835,7 +751,6 @@ function initWorldBox() {
   });
 }
 function setFocus(key) {
-  if (state.lens) { state.lens = null; syncLensChips(); }     // language focus and a lens are mutually exclusive
   state.focus = (state.focus === key) ? null : key;
   document.body.classList.toggle('focus-on', !!state.focus);
   const fb = document.getElementById('focusBanner');
@@ -892,7 +807,6 @@ document.addEventListener('click', e => { if (!menu.classList.contains('hidden')
 
 document.getElementById('miView').addEventListener('click', () => { setFlat(!state.flat); closeMenu(); });
 document.getElementById('miFamily').addEventListener('click', () => { setFamily(!state.byFamily); closeMenu(); });
-document.getElementById('lensChips').addEventListener('click', e => { const c = e.target.closest('.lens-chip'); if (c) setLens(c.dataset.lens); });
 document.getElementById('miFill').addEventListener('click', () => { const i = VIEW_ORDER.indexOf(state.view); setView(VIEW_ORDER[(i + 1) % VIEW_ORDER.length]); });
 setView(state.view);
 
@@ -985,7 +899,6 @@ document.addEventListener('click', e => { if (!document.getElementById('searchWr
 function buildShareURL() {
   const seg = [curYear(), state.focus || '', state.selected || ''];
   if (state.byFamily) seg.push('family');
-  if (state.lens) seg.push('lens=' + state.lens);
   if (state.flat) seg.push('flat');
   while (seg.length > 1 && seg[seg.length - 1] === '') seg.pop();
   return location.origin + location.pathname + '#' + seg.join(',');
@@ -1065,97 +978,8 @@ document.getElementById('wtChart').addEventListener('click', e => {
   state.stepIdx = nearestStep(yr(SLICES[i].id)); stopPlay(); applySlice(); showWorldTrend();
 });
 
-/* ------------------------------- guided stories ------------------------------- */
-/* Each step is a deep-link hash + a caption; stepping just applies that view state.
-   Rides entirely on the existing time / focus / family / lens machinery. */
-const STORIES = [
-  { id: 'latin', title: 'The fall of Latin', blurb: 'Rome’s tongue and the birth of the Romance languages.', steps: [
-    { hash: '1,latin',     text: 'At its height (1 CE), Latin is the everyday language of Rome and its western provinces — Italy, Iberia, Gaul, North Africa.' },
-    { hash: '500,latin',   text: 'Rome falls in 476, but spoken Latin lives on across the former empire as ordinary speech.' },
-    { hash: '1000,latin',  text: 'By 1000 that spoken Latin has splintered into local “vulgar” dialects — no longer one language.' },
-    { hash: '1500,french', text: 'Those dialects are now distinct tongues. Latin’s daughters — French, Spanish, Italian, Portuguese, Romanian — rule its old lands.' },
-  ]},
-  { id: 'arabic', title: 'Arabic’s expansion', blurb: 'From a corner of Arabia to three continents.', steps: [
-    { hash: '500,arabic',  text: '500 CE: Arabic is spoken almost only across the Arabian Peninsula.' },
-    { hash: '750,arabic',  text: 'After the early Islamic conquests, Arabic sweeps the Near East and North Africa within a century.' },
-    { hash: '1500,arabic', text: 'It is now entrenched as the language of faith, law and trade across the region.' },
-    { hash: '2025,arabic', text: 'Today Arabic is the primary language of around a dozen nations.' },
-  ]},
-  { id: 'colonial', title: 'The colonial tongues', blurb: 'How a few European languages crossed the oceans.', steps: [
-    { hash: '1500,spanish', text: '1500: Spanish is confined to a newly-unified Iberia.' },
-    { hash: '1800,spanish', text: 'Three centuries of empire plant Spanish across the Americas.' },
-    { hash: '1900,english', text: 'Meanwhile English, carried by the British Empire, is becoming a global tongue.' },
-    { hash: '2025,english', text: 'Today English is an official or primary language on every inhabited continent.' },
-  ]},
-  { id: 'indoeuropean', title: 'The Indo-European story', blurb: 'One ancient family, half the world.', steps: [
-    { hash: '1,,,family',    text: 'In Family view the deep kinship shows: by 1 CE one family already stretches from Iberia to India.' },
-    { hash: '1500,,,family', text: 'Branch by branch — Romance, Germanic, Slavic, Indo-Aryan, Iranian — Indo-European dominates Europe and South Asia.' },
-    { hash: '2025,,,family', text: 'Today nearly half of humanity speaks an Indo-European language as its mother tongue.' },
-  ]},
-  { id: 'ghosts', title: 'Ghosts of antiquity', blurb: 'Where the classical tongues once ruled.', steps: [
-    { hash: '1,,,lens=classical',    text: 'The Classical lens at 1 CE: Latin, Aramaic, Sanskrit and the Sumerian-Akkadian sphere blaze across the Old World.' },
-    { hash: '500,,,lens=classical',  text: 'By 500 CE the classical tongues are fading as living everyday speech.' },
-    { hash: '1500,,,lens=classical', text: 'By 1500 they survive mostly in scripture and scholarship — Latin in the church, Sanskrit in temple and text.' },
-  ]},
-];
-let story = null, storyIdx = 0;
-function applyStoryStep(hash) {
-  const parts = (hash || '').replace(/^#/, '').split(',').map(s => s.trim());
-  const sid = parts[0], foc = parts[1] || '';
-  const lm = hash.match(/lens=(\w+)/);
-  if (sid) { const y = yr(sid); if (!isNaN(y)) state.stepIdx = nearestStep(y); }
-  state.byFamily = /family/i.test(hash);
-  state.lens = (lm && LENS_META[lm[1]]) ? lm[1] : null;
-  state.focus = (!state.lens && foc && (LANGUAGES[foc] || PHYLA[foc])) ? foc : null;
-  if (/flat/i.test(hash)) { if (!state.flat) setFlat(true); } else if (state.flat) setFlat(false);
-  // sync the toggles' UI to the freshly-set state
-  syncLensChips();
-  const mf = document.getElementById('miFamily'); if (mf) { mf.classList.toggle('on', state.byFamily); const s = mf.querySelector('.mi-state'); if (s) s.textContent = state.byFamily ? 'On' : 'Off'; }
-  document.body.classList.toggle('focus-on', !!state.focus);
-  const fb = document.getElementById('focusBanner');
-  if (state.focus) { fb.innerHTML = `Showing share of <b style="color:${langColor(state.focus)}">${langLabel(state.focus)}</b> &nbsp;·&nbsp; <span class="fb-x">clear ✕</span>`; fb.classList.remove('hidden'); } else fb.classList.add('hidden');
-  if (globe && !state.flat) { globe.controls().autoRotate = false; spinOn = false; syncSpin(); }
-  applySlice(); refreshPies();
-}
-function openStoryPicker() {
-  document.getElementById('storyList').innerHTML = STORIES.map(s =>
-    `<button class="story-pick" data-id="${s.id}"><span class="sp-t">${s.title}</span><span class="sp-b">${s.blurb}</span></button>`).join('');
-  document.getElementById('storyPicker').classList.remove('hidden');
-}
-function closeStoryPicker() { document.getElementById('storyPicker').classList.add('hidden'); }
-function renderStoryStep() {
-  if (!story) return;
-  const st = story.steps[storyIdx];
-  applyStoryStep(st.hash);
-  document.getElementById('storyTitle').textContent = story.title;
-  document.getElementById('storyText').textContent = st.text;
-  document.getElementById('storyProg').textContent = (storyIdx + 1) + ' / ' + story.steps.length;
-  document.getElementById('storyPrev').disabled = storyIdx === 0;
-  document.getElementById('storyNext').textContent = storyIdx === story.steps.length - 1 ? 'Done ✓' : 'Next ▶';
-}
-function startStory(id) {
-  story = STORIES.find(s => s.id === id); if (!story) return;
-  storyIdx = 0; closeStoryPicker(); closeMenu();
-  document.getElementById('storyBar').classList.remove('hidden');
-  renderStoryStep();
-}
-function storyStep(d) {
-  if (!story) return;
-  if (d > 0 && storyIdx === story.steps.length - 1) { endStory(); return; }
-  storyIdx = Math.max(0, Math.min(story.steps.length - 1, storyIdx + d));
-  renderStoryStep();
-}
-function endStory() { story = null; document.getElementById('storyBar').classList.add('hidden'); }
-document.getElementById('miStories').addEventListener('click', () => { closeMenu(); openStoryPicker(); });
-document.getElementById('storyList').addEventListener('click', e => { const b = e.target.closest('.story-pick'); if (b) startStory(b.dataset.id); });
-document.getElementById('storyPickClose').addEventListener('click', closeStoryPicker);
-document.getElementById('storyPicker').addEventListener('click', e => { if (e.target.id === 'storyPicker') closeStoryPicker(); });
-document.getElementById('storyPrev').addEventListener('click', () => storyStep(-1));
-document.getElementById('storyNext').addEventListener('click', () => storyStep(1));
-document.getElementById('storyExit').addEventListener('click', endStory);
-
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeMenu(); closeTutorial(); closeFlatTip(); closeWorldTrend(); closeStoryPicker(); endStory(); aboutOverlay.classList.add('hidden'); if (state.focus) setFocus(state.focus); if (!detailCard.classList.contains('hidden')) closeDetail(); }
+  if (e.key === 'Escape') { closeMenu(); closeTutorial(); closeFlatTip(); closeWorldTrend(); aboutOverlay.classList.add('hidden'); if (state.focus) setFocus(state.focus); if (!detailCard.classList.contains('hidden')) closeDetail(); }
   else if (e.target && e.target.tagName === 'INPUT') return;   // don't scrub time while typing in search
   else if (e.key === 'ArrowRight') { state.stepIdx = Math.min(STEPS.length - 1, state.stepIdx + 1); stopPlay(); applySlice(); }
   else if (e.key === 'ArrowLeft') { state.stepIdx = Math.max(0, state.stepIdx - 1); stopPlay(); applySlice(); }
@@ -1174,8 +998,6 @@ function boot() {
   fetch('data/countries.geojson').then(r => r.json()).then(geo => {
     initGlobe(geo);
     if (/family/i.test(location.hash)) setFamily(true);
-    const lensM = (location.hash || '').match(/lens=(\w+)/);
-    if (lensM && LENS_META[lensM[1]]) setLens(lensM[1]);
     if (foc && (LANGUAGES[foc] || PHYLA[foc])) setFocus(foc);
     if (iso) { const f = countries.find(c => isoOf(c.properties) === iso.toUpperCase()); if (f) onClick(f); }
     if (/flat/i.test(location.hash)) setFlat(true);
