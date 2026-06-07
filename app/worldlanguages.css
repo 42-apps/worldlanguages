@@ -146,6 +146,21 @@ body{
 .gb-v{color:#fff; font-variant-numeric:tabular-nums; font-weight:600}
 .gb-note{margin-top:9px; font-size:9.5px; color:#6f7c93; letter-spacing:.02em}
 
+/* ---- map-lens chips + gradient legend (in the world box) ---- */
+#lensChips{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:11px}
+.lens-chip{padding:4px 9px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; line-height:1.2;
+  background:rgba(255,255,255,.05); color:var(--muted); border:1px solid var(--line)}
+.lens-chip:hover{background:rgba(255,255,255,.12); color:#cdd8ea}
+.lens-chip.on{background:#2f6fe0; color:#fff; border-color:#9cc6ff}
+#lensLegend{margin-top:2px}
+.ll-grad{height:12px; border-radius:6px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+.ll-ends{display:flex; justify-content:space-between; font-size:10.5px; color:var(--muted); margin-top:6px}
+.ll-note{font-size:11px; color:#aebbd2; line-height:1.5; margin-top:9px}
+.detail-lens{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; padding:6px 10px;
+  border-radius:8px; background:rgba(47,111,224,.16); border:1px solid rgba(120,160,230,.3)}
+.detail-lens .dl-k{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#9cc6ff; font-weight:700}
+.detail-lens .dl-v{font-size:13px; font-weight:700; color:#fff}
+
 /* ---- time bar ---- */
 #timebar{
   position:fixed; left:0; right:0; bottom:0; z-index:30; padding:9px 0 12px;
@@ -225,3 +240,34 @@ body.is-future #timeSlider::-webkit-slider-thumb{border-color:#b06fd0}
 .tut-btn{padding:11px 22px; border:none; border-radius:11px; cursor:pointer; font-size:14px; font-weight:700;
   background:#2f6fe0; color:#fff; box-shadow:0 6px 18px rgba(47,111,224,.5)}
 .tut-btn:hover{background:#3d8bff}
+
+/* ---- guided stories ---- */
+#storyPicker{position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center;
+  background:rgba(3,7,15,.78); backdrop-filter:blur(4px)}
+.sp-box{position:relative; width:min(520px,92vw); max-height:86vh; overflow:auto; padding:26px 28px;
+  border-radius:16px; background:#0c1a30; border:1px solid var(--line); box-shadow:0 24px 70px rgba(0,0,0,.6)}
+.sp-box h2{margin:0 0 4px; font-size:21px}
+.sp-sub{margin:0 0 16px; font-size:12.5px; color:var(--muted)}
+#storyList{display:flex; flex-direction:column; gap:9px}
+.story-pick{display:flex; flex-direction:column; gap:3px; text-align:left; padding:13px 15px; border-radius:11px; cursor:pointer;
+  background:rgba(255,255,255,.04); color:var(--txt); border:1px solid var(--line)}
+.story-pick:hover{background:rgba(47,111,224,.18); border-color:#3d8bff}
+.sp-t{font-weight:700; font-size:14.5px}
+.sp-b{font-size:12px; color:var(--muted)}
+#storyBar{position:fixed; left:50%; bottom:104px; transform:translateX(-50%); z-index:33; width:min(560px,94vw);
+  display:flex; align-items:center; gap:14px; padding:13px 16px 13px; border-radius:14px;
+  background:var(--panel); border:1px solid var(--line); backdrop-filter:blur(9px); box-shadow:0 14px 40px rgba(0,0,0,.55)}
+.story-x{position:absolute; top:6px; right:8px; width:22px; height:22px; border:none; border-radius:6px; background:transparent; color:var(--muted); font-size:16px; cursor:pointer}
+.story-x:hover{background:rgba(255,255,255,.08); color:#fff}
+.story-main{flex:1; min-width:0}
+.story-top{display:flex; align-items:baseline; gap:9px; margin-bottom:3px}
+.story-title{font-weight:700; font-size:13.5px; color:#9cc6ff}
+.story-prog{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+.story-text{font-size:13px; line-height:1.5; color:#dce5f3}
+.story-nav{display:flex; gap:8px; flex:none}
+.story-btn{padding:8px 13px; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+  background:rgba(255,255,255,.06); color:var(--txt); border:1px solid var(--line)}
+.story-btn:hover:not(:disabled){background:rgba(255,255,255,.13)}
+.story-btn.primary{background:#2f6fe0; color:#fff; border-color:#9cc6ff}
+.story-btn.primary:hover{background:#3d8bff}
+.story-btn:disabled{opacity:.4; cursor:default}
