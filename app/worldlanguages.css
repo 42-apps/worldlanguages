@@ -56,11 +56,13 @@ body{
 
 /* ---- globe ---- */
 #globeViz{position:fixed; inset:54px 0 92px 0}
-/* Explicit height (NOT `inset`): an <svg> with a viewBox + auto height sizes itself
-   from the 2:1 viewBox aspect and ignores the bottom offset, overflowing under the
-   time bar and clipping the southern continents. A definite height fixes that;
-   preserveAspectRatio="meet" then letterboxes the map inside the box. */
-#flatViz{position:fixed; top:54px; left:0; right:0; height:calc(100vh - 160px); z-index:1; cursor:grab}
+/* Give BOTH dimensions a definite size. An <svg> with a viewBox sizes any auto
+   dimension from its 2:1 viewBox aspect: auto height -> too tall (overflows under
+   the time bar, clipping the south); `left:0;right:0` auto width -> too narrow on
+   wide screens (left-aligned with a big empty band on the right). With explicit
+   width + height the box is the full rectangle and preserveAspectRatio="meet"
+   letterboxes/centres the map inside it. */
+#flatViz{position:fixed; top:54px; left:0; width:100vw; height:calc(100vh - 160px); z-index:1; cursor:grab}
 .flat-ocean{fill:rgba(18,34,64,.4)}
 .fcell{pointer-events:none}
 .flat-hit{fill:transparent; pointer-events:all; stroke:rgba(8,12,24,.55); stroke-width:0.7; cursor:pointer}
